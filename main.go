@@ -90,7 +90,22 @@ func show() {
 			log.Fatal(err)
 		}
 
-		fmt.Printf("%s - %s\n", date(created), message)
+		r2, err := DB.Query(`select l.label from labels as l join entry_labels as el on l.id=el.id where el.entry=?`, messageID)
+		if err != nil {
+			log.Fatal(err)
+		}
+		labels := make([]string, 0)
+		for r2.Next() {
+			var label string
+			err := r2.Scan(&label)
+			if err != nil {
+				log.Fatal(err)
+			}
+			labels = append(labels, label)
+		}
+		r2.Close()
+
+		fmt.Printf("%s - %s %v\n", date(created), message, labels)
 	}
 }
 
@@ -116,6 +131,7 @@ func insert(message string, labels map[string]int) error {
 	}
 
 	for _, labelID := range labels {
+		log.Println("inserting label: %d", labelID)
 		_, err := DB.Exec(`insert into entry_labels (entry, label) values (?, ?)`, messageID, labelID)
 		if err != nil {
 			return err
