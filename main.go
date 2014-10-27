@@ -20,20 +20,22 @@ var LABEL string
 var MESSAGE string
 
 var SHOW bool
+var SHOW_LABELS bool
 
 var DB *sql.DB
 
 func init() {
-	flag.StringVar(&DB_NAME, "db_name", "taskr.db", "defaults to taskr.db")
+	flag.StringVar(&DB_NAME, "db_name", ".taskr.db", "full path. defaults to .taskr.db")
 	flag.StringVar(&NEW_LABEL, "label", "", "create a new label to use for messages")
 	flag.StringVar(&LABEL, "l", "default", "set a list of labels allowing you to group your message, comma delimited")
 	flag.StringVar(&MESSAGE, "m", "", "a message entry to log")
 	flag.BoolVar(&SHOW, "show", false, "set to true to show all entries")
+	flag.BoolVar(&SHOW_LABELS, "show_labels", false, "set to true to show all registered labels")
 }
 
 func main() {
 	flag.Parse()
-
+	DB_NAME = "/Users/sethammons/" + DB_NAME
 	if !dbExists(DB_NAME) {
 		log.Println("No DB Found. Creating")
 		err := createDB(DB_NAME)
@@ -43,7 +45,7 @@ func main() {
 	}
 	var err error
 
-	DB, err = sql.Open("sqlite3", fmt.Sprintf("./%s", DB_NAME))
+	DB, err = sql.Open("sqlite3", fmt.Sprintf("%s", DB_NAME))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,9 +70,31 @@ func main() {
 		return
 	}
 
+	if SHOW_LABELS {
+		show_labels()
+		return
+	}
+
 	err = insert(MESSAGE, labels)
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func show_labels() {
+	r, err := DB.Query(`select label from labels`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer r.Close()
+	for r.Next() {
+		var label string
+
+		err := r.Scan(&label)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("* %s\n", label)
 	}
 }
 
@@ -90,13 +114,14 @@ func show() {
 			log.Fatal(err)
 		}
 
-		r2, err := DB.Query(`select l.label from labels as l join entry_labels as el on l.id=el.id where el.entry=?`, messageID)
+		r2, err := DB.Query(`SELECT l.label AS label FROM entries AS e, entry_labels AS el, labels AS l WHERE e.id=el.entry AND l.id=el.label AND e.id=?`, messageID)
 		if err != nil {
 			log.Fatal(err)
 		}
 		labels := make([]string, 0)
 		for r2.Next() {
 			var label string
+
 			err := r2.Scan(&label)
 			if err != nil {
 				log.Fatal(err)
@@ -131,7 +156,6 @@ func insert(message string, labels map[string]int) error {
 	}
 
 	for _, labelID := range labels {
-		log.Println("inserting label: %d", labelID)
 		_, err := DB.Exec(`insert into entry_labels (entry, label) values (?, ?)`, messageID, labelID)
 		if err != nil {
 			return err
@@ -177,12 +201,12 @@ func dbExists(name string) bool {
 }
 
 func createDB(name string) error {
-	err := os.Remove(fmt.Sprintf("./%s", name))
+	err := os.Remove(fmt.Sprintf("%s", name))
 	if err != nil && !os.IsNotExist(err) {
 		log.Fatal(err)
 	}
 
-	db, err := sql.Open("sqlite3", fmt.Sprintf("./%s", name))
+	db, err := sql.Open("sqlite3", fmt.Sprintf("%s", name))
 	if err != nil {
 		log.Fatal(err)
 	}
